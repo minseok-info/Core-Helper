@@ -69,6 +69,7 @@ async def process(images: list[UploadFile] = File(...), selected_job_class: str 
   skills = get_job_skills(job_class_path)
 
   icons = []
+  upper_color = [180, 255, 35]
   for image in images:
     content = await image.read()
     np_img = np.frombuffer(content, np.uint8)
@@ -76,7 +77,7 @@ async def process(images: list[UploadFile] = File(...), selected_job_class: str 
     if display is None:
       continue
 
-    cores = find_core_candidates(display)
+    cores = find_core_candidates(display, color=upper_color)
     # print(f"cores: {len(cores)}")
     if not cores:
       continue
@@ -86,12 +87,12 @@ async def process(images: list[UploadFile] = File(...), selected_job_class: str 
     if not enhanced_cores:
       continue
 
-    core_icons = extract_core_icon_candidates(enhanced_cores)
+    core_icons = extract_core_icon_candidates(enhanced_cores, color=upper_color)
     # print(f"core_icons: {len(core_icons)}")
     if not core_icons:
       continue
 
-    valid_core_icons = filter_valid_core_icons(core_icons)
+    valid_core_icons = filter_valid_core_icons(core_icons, color=upper_color)
     # print(f"valid_core_icons: {len(valid_core_icons)}")
     if valid_core_icons:
       icons.extend(valid_core_icons)
@@ -222,7 +223,7 @@ def find_core_candidates(display, color=[180, 255, 50]):
     if not is_reasonable_box(x, y, w, h):
       continue
 
-    # 🔹 패딩 포함 영역 계산
+    # 패딩 포함 영역 계산
     x1 = max(x - padding, 0)
     y1 = max(y - padding, 0)
     x2 = min(x + w + padding, width)
@@ -303,10 +304,10 @@ def filter_valid_core_icons(icons, color=[180, 255, 50]):
     masked = cv2.inRange(smoothed, lower_color, upper_color)
     edges = np.concatenate([masked[0, :], masked[-1, :], masked[:, 0], masked[:, -1]])
 
-    # 스킬 후보(모서리에 흰색이 62 ~ 124)
+    # 스킬 후보(모서리에 흰색이 42 ~ 124)
     counter = Counter()
     counter.update(map(str, edges))
-    if 62 <= counter["255"] <= 124:
+    if 42 <= counter["255"] <= 124:
       core_icons.append(icon)
   return core_icons
 
