@@ -59,7 +59,12 @@ async def core_helper(images: list[UploadFile] = File(...), selected_job_class: 
       "message": "서버에 오류가 발생했어요.\n같은 현상이 반복되면 관리자에게 문의해 주세요."
     })
 
-async def process(images: list[UploadFile] = File(...), selected_job_class: str = Form(...)):
+async def process(
+  images: list[UploadFile] = File(...),
+  selected_job_class: str = Form(...),
+  cached_np_buffers = None,
+  retry: bool = False
+):
   start_time = time.time()
   print(f"요청 - 직업: [{selected_job_class}], 이미지: [{len(images)}]")
 
@@ -68,12 +73,22 @@ async def process(images: list[UploadFile] = File(...), selected_job_class: str 
   job_class_path = os.path.join(base_path, "skills", selected_job_class)
   skills = get_job_skills(job_class_path)
 
+  # 첫 실행 시 이미지 캐싱
+  if cached_np_buffers is None:
+    cached_np_buffers = []
+    for image in images:
+      content = await image.read()
+      if content:
+        np_buf = np.frombuffer(content, np.uint8)
+        cached_np_buffers.append(np_buf)
+      del content
+      gc.collect()
+
   icons = []
-  upper_color = [180, 255, 35]
-  for image in images:
-    content = await image.read()
-    np_img = np.frombuffer(content, np.uint8)
-    display = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+  upper_color = [180, 255, 50] if retry else [180, 255, 35]
+
+  for np_buf in cached_np_buffers:
+    display = cv2.imdecode(np_buf, cv2.IMREAD_COLOR)
     if display is None:
       continue
 
@@ -101,8 +116,6 @@ async def process(images: list[UploadFile] = File(...), selected_job_class: str 
     del enhanced_cores
     del core_icons
     del valid_core_icons
-    del content
-    del np_img
     del display
     gc.collect()
   find_cores = time.time()
@@ -116,6 +129,15 @@ async def process(images: list[UploadFile] = File(...), selected_job_class: str 
   analyze_cores = time.time()
   print(f"경과 시간[코어 분석]: {analyze_cores - find_cores:.3f}초, 분석된 코어: {len(detected_cores)}개")
   print(f"소요 시간: {analyze_cores - start_time:.3f}초")
+
+  if len(detected_cores) <= 1 and not retry:
+    print("코어 분석 결과 부족: upper_color 변경 후 재시도")
+    return await process(
+      images,
+      selected_job_class,
+      cached_np_buffers,
+      retry=True
+    )
 
   if not icons and not detected_cores:
     return {
