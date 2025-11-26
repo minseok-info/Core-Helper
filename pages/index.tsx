@@ -200,6 +200,11 @@ const Index = () => {
       setLoadingMessage("아직 분석 중이니까 나가지 말아 주세요");
     }, 60000);
 
+    const isDev = process.env.NODE_ENV === "development";
+    const serverUrl = isDev
+      ? "http://127.0.0.1:8000/core-helper/"
+      : "https://core-helper-back.fly.dev/core-helper/";
+
     if (isCacheValid) {
       const loadingDelayTimer = setTimeout(() => {
         setIsLoading(true);
@@ -207,24 +212,45 @@ const Index = () => {
         setCoreCombination([]);
       }, 100);
 
-      if (cachedCores.length > 0) {
-        const combinations = await findBestCombination(cachedCores);
+      try {
+        if (cachedCores.length > 0) {
+          const adjustedCores = cachedCores.filter(core => {
+            let count = 0;
+            core.forEach(c => {
+              if (selectedSkills.includes(c)) count++;
+            });
+            if (count > 1) return core;
+          });
 
-        setIsLoading(false);
-  
-        if (combinations.length > 0) {
-          setResultMessage("");
-          setCoreCombination(combinations);
+          let combinations: any[] = [];
+
+          if (adjustedCores.length > 0) {
+            combinations = await findBestCombination(adjustedCores);
+          }
+
+          if (combinations.length === 0) {
+            combinations = await findBestCombination(cachedCores);
+          }
+
+          setIsLoading(false);
+
+          if (combinations.length > 0) {
+            setResultMessage("");
+            setCoreCombination(combinations);
+          }
+          else {
+            setResultMessage(
+              "현재 보유한 코어로는 조합이 어려워요.\n코어를 조금 더 모은 뒤 사용해 주세요."
+            );
+          }
         }
         else {
-          setResultMessage("현재 보유한 코어로는 조합이 어려워요.\n코어를 조금 더 모은 뒤 사용해 주세요.");
+          setResultMessage(data.message ? data.message : "");
         }
       }
-      else {
-        setResultMessage(data.message ? data.message : "");
+      finally {
+        clearAllTimeout([loadingDelayTimer]);
       }
-
-      clearAllTimeout([loadingDelayTimer]);
     }
     else {
       setIsLoading(true);
@@ -241,11 +267,7 @@ const Index = () => {
       });
 
       try {
-        const devServer = "http://127.0.0.1:8000/core-helper/";
-        const liveServer = "https://core-helper-back.fly.dev/core-helper/";
-
-        // const res = await fetch(devServer, {
-        const res = await fetch(liveServer, {
+        const res = await fetch(serverUrl, {
           method: "POST",
           body: formData,
         });
@@ -265,9 +287,13 @@ const Index = () => {
         }
         else {
           await res.json().then(async (json: dataAttribute) => {
-            // console.log(json["core_skill_names"]);
-            // setIsCacheValid(false);
-            setIsCacheValid(true);
+            if (isDev) {
+              console.log(json["core_skill_names"]);
+              setIsCacheValid(false);
+            }
+            else {
+              setIsCacheValid(true);
+            }
 
             if (!json.success) {
               setData({
@@ -278,8 +304,25 @@ const Index = () => {
             else {
               const cores = json["core_skill_names"]!;
               setCachedCores(cores);
+
+              const adjustedCores = cores.filter(core => {
+                let count = 0;
+                core.forEach(c => {
+                  if (selectedSkills.includes(c)) count++;
+                });
+                if (count > 1) return core;
+              });
+
+              let combinations: any[] = [];
+
+              if (adjustedCores.length > 0) {
+                combinations = await findBestCombination(adjustedCores);
+              }
+
+              if (combinations.length === 0) {
+                combinations = await findBestCombination(cores);
+              }
   
-              const combinations = await findBestCombination(cores);
               if (combinations.length > 0) {
                 setCoreCombination(combinations);
               }
@@ -316,7 +359,7 @@ const Index = () => {
   };
 
   const findBestCombination = async (cores: string[][]) => {
-    let coreIndicesByMainSkill: { [key: string]: number[] } = {};
+    let coreIndicesByMainSkill: Record<string, number[]> = {};
     coreIndicesByMainSkill = groupCoresByMainSkill(cores);
     const coreLevelsBySkill = calculateCoreLevelsBySkill(coreIndicesByMainSkill);
 
