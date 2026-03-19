@@ -1,7 +1,7 @@
 import styles from "@/styles/index.module.css"
 import { JobCategory, JobClassCategory, SkillData } from "@/types/job.types";
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { jobs } from "@/data/jobs";
 import { jobClasses } from "@/data/job-classes";
 import jobClassSkills from "@/data/skills";
@@ -53,25 +53,25 @@ const Index = () => {
 
   const [data, setData] = useState<dataAttribute>({});
 
-  const onSelectJob = (job: JobCategory) => {
+  const onSelectJob = useCallback((job: JobCategory) => {
     setSelectedJob(job);
-  };
+  }, []);
 
-  const onSelectJobClass = (jobClass: JobClassCategory) => {
+  const onSelectJobClass = useCallback((jobClass: JobClassCategory) => {
     setSelectedJobClass(jobClass);
     setSelectedSkills([]);
     setResultMessage("");
     setCoreCombination([]);
-  };
+  }, []);
 
-  const onSelectSkill = (skill: string) => {
+  const onSelectSkill = useCallback((skill: string) => {
     setSelectedSkills((prev) => prev.includes(skill) ? prev.filter((sk) => sk !== skill) : [...prev, skill]);
-  };
+  }, []);
 
-  const onToggleOverlap = (bool: boolean) => {
+  const onToggleOverlap = useCallback((bool: boolean) => {
     if (bool) setRequiredOverlap(3);
     else setRequiredOverlap(2);
-  }
+  }, []);
 
   const onSelectImages = useCallback((target: HTMLInputElement) => {
     const files = target.files || [];
@@ -116,10 +116,10 @@ const Index = () => {
     });
   }, []);
 
-  const onToggleRecordScreen = () => {
+  const onToggleRecordScreen = useCallback(() => {
     if (mediaStream) stopRecordScreen();
     else startRecordScreen();
-  };
+  }, [mediaStream]);
 
   const onCaptureRecordingScreen = async () => {
     if (!mediaStream) {
@@ -504,6 +504,10 @@ const Index = () => {
     return translatedArray;
   };
   
+  // Memoize the current job class skills to prevent recalculation on every render
+  const currentJobClassSkills = useMemo(() => jobClassSkills[selectedJobClass], [selectedJobClass]);
+  const currentJobClasses = useMemo(() => jobClasses[selectedJob], [selectedJob]);
+
   useEffect(() => {
     setData({});
     setCachedCores([]);
@@ -597,7 +601,7 @@ const Index = () => {
           <div className={`flex flex-column gap-15 ${styles.right}`}>
             <div className={`grid justify-center background-white pd-10 gap-15 br-5 ${styles.jobClasses}`}>
               {
-                jobClasses[selectedJob].map((jobClass) => (
+                currentJobClasses.map((jobClass) => (
                   <label htmlFor={jobClass.jobClass} className="pointer br-5 overflow-hidden transition-150" key={jobClass.jobClass}>
                     <input type="radio" className="none" id={jobClass.jobClass} name="job" onChange={() => onSelectJobClass(jobClass.jobClass)} checked={jobClass.jobClass === selectedJobClass} />
                     <Image className="transition-250" src={jobClass.image.src} alt={jobClass.image.alt} priority />
@@ -608,7 +612,7 @@ const Index = () => {
             <div className="flex flex-column background-white pd-10 br-5 gap-10">
               <div className={`grid justify-center gap-10 ${styles.skills}`}>
                 {
-                  jobClassSkills[selectedJobClass].map((skill) => (
+                  currentJobClassSkills.map((skill) => (
                     <label htmlFor={skill.skill} className="pointer flex align-center pd-5 br-5 gap-5 transition-150" key={skill.skill}>
                       <input type="checkbox" className="none" id={skill.skill} name="skill" onChange={() => onSelectSkill(skill.skill)} checked={selectedSkills.includes(skill.skill)} />
                       <Image className="transition-150" src={skill.image.src} alt={skill.image.alt} />
